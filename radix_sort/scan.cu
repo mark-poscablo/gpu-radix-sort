@@ -174,6 +174,7 @@ void sum_scan_naive(unsigned int* const d_out,
 }
 
 void sum_scan_blelloch(unsigned int* const d_out,
+	unsigned int* const d_last_elem_dup,
 	const unsigned int* const d_in,
 	const size_t numElems)
 {
@@ -212,7 +213,7 @@ void sum_scan_blelloch(unsigned int* const d_out,
 		unsigned int* d_in_block_sums;
 		checkCudaErrors(cudaMalloc(&d_in_block_sums, sizeof(unsigned int) * gridSz));
 		checkCudaErrors(cudaMemcpy(d_in_block_sums, d_block_sums, sizeof(unsigned int) * gridSz, cudaMemcpyDeviceToDevice));
-		sum_scan_blelloch(d_block_sums, d_in_block_sums, gridSz);
+		sum_scan_blelloch(d_block_sums, NULL, d_in_block_sums, gridSz);
 		checkCudaErrors(cudaFree(d_in_block_sums));
 	}
 	
@@ -232,4 +233,10 @@ void sum_scan_blelloch(unsigned int* const d_out,
 	gpu_add_block_sums<<<gridSz, blockSz>>>(d_out, d_out, d_block_sums, numElems);
 
 	checkCudaErrors(cudaFree(d_block_sums));
+
+	if (d_last_elem_dup != NULL)
+	{
+		unsigned int* d_last_elem = &d_out[numElems - 1];
+		checkCudaErrors(cudaMemcpy(d_last_elem_dup, d_last_elem, sizeof(unsigned int), cudaMemcpyDeviceToDevice));
+	}
 }

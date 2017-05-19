@@ -12,6 +12,7 @@ void sum_scan_naive(unsigned int* const d_out,
 	const size_t numElems);
 
 void sum_scan_blelloch(unsigned int* const d_out,
+	unsigned int* const d_last_elem_dup,
 	const unsigned int* const d_in,
 	const size_t numElems);
 
