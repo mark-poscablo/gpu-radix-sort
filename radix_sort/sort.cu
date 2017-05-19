@@ -82,6 +82,7 @@ void radix_sort(unsigned int* const d_out,
 			gpu_scatter_elems<<<grid_sz, block_sz>>>(d_out, d_in, d_preds, d_scanned_preds, d_scatter_offset, numElems, bit);
 		}
 
+		// Copy d_out to d_in in preparation for next significant bit
 		checkCudaErrors(cudaMemcpy(d_in, d_out, sizeof(unsigned int) * numElems, cudaMemcpyDeviceToDevice));
 	}	
 
