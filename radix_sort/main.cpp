@@ -25,85 +25,92 @@ int main()
 	std::clock_t start;
 	double duration;
 
-	for (int k = 0; k < 27; ++k)
+	for (int i = 0; i <= 26; ++i)
 	{
-		unsigned int num_elems = 1 << k;
-		std::cout << "h_in size: " << num_elems << std::endl;
-
-		unsigned int* h_in = new unsigned int[num_elems];
-		unsigned int* h_out_cpu = new unsigned int[num_elems];
-		unsigned int* h_out_gpu = new unsigned int[num_elems];
-
-		for (int i = 0; i < num_elems; i++)
+		for (int j = 0; j <= 1; ++j)
 		{
-			h_in[i] = (num_elems - 1) - i;
-			//std::cout << h_in[i] << " ";
-		}
-		start = std::clock();
-		cpu_sort(h_out_cpu, h_in, num_elems);
-		duration = (std::clock() - start) / (double)CLOCKS_PER_SEC;
-		std::cout << "CPU time: " << duration << std::endl;
+			if (i == 0 && j == 1)
+				continue;
 
-		unsigned int* d_in;
-		unsigned int* d_preds;
-		unsigned int* d_scanned_preds;
-		unsigned int* d_out;
-		checkCudaErrors(cudaMalloc(&d_in, sizeof(unsigned int) * num_elems));
-		checkCudaErrors(cudaMalloc(&d_preds, sizeof(unsigned int) * num_elems));
-		checkCudaErrors(cudaMalloc(&d_scanned_preds, sizeof(unsigned int) * num_elems));
-		checkCudaErrors(cudaMalloc(&d_out, sizeof(unsigned int) * num_elems));
-		checkCudaErrors(cudaMemcpy(d_in, h_in, sizeof(unsigned int) * num_elems, cudaMemcpyHostToDevice));
-		start = std::clock();
-		radix_sort(d_out, d_in, d_preds, d_scanned_preds, num_elems);
-		duration = (std::clock() - start) / (double)CLOCKS_PER_SEC;
-		std::cout << "GPU time: " << duration << std::endl;
-		checkCudaErrors(cudaMemcpy(h_out_gpu, d_out, sizeof(unsigned int) * num_elems, cudaMemcpyDeviceToHost));
-		checkCudaErrors(cudaFree(d_out));
-		checkCudaErrors(cudaFree(d_scanned_preds));
-		checkCudaErrors(cudaFree(d_preds));
-		checkCudaErrors(cudaFree(d_in));
+			unsigned int num_elems = (1 << i) - j;
+			//unsigned int num_elems = 3;
+			std::cout << "h_in size: " << num_elems << std::endl;
 
-		// Check for any mismatches between outputs of CPU and GPU
-		bool match = true;
-		int index_diff = 0;
-		for (int i = 0; i < num_elems; ++i)
-		{
-			if (h_out_cpu[i] != h_out_gpu[i])
+			unsigned int* h_in = new unsigned int[num_elems];
+			unsigned int* h_out_cpu = new unsigned int[num_elems];
+			unsigned int* h_out_gpu = new unsigned int[num_elems];
+
+			for (int i = 0; i < num_elems; i++)
 			{
-				match = false;
-				index_diff = i;
-				break;
+				h_in[i] = (num_elems - 1) - i;
+				//std::cout << h_in[i] << " ";
 			}
-		}
-		std::cout << "Match: " << match << std::endl;
+			start = std::clock();
+			cpu_sort(h_out_cpu, h_in, num_elems);
+			duration = (std::clock() - start) / (double)CLOCKS_PER_SEC;
+			std::cout << "CPU time: " << duration << std::endl;
 
-		// Detail the mismatch if any
-		if (!match)
-		{
-			std::cout << "Difference in index: " << index_diff << std::endl;
-			std::cout << "CPU: " << h_out_cpu[index_diff] << std::endl;
-			std::cout << "GPU Radix Sort: " << h_out_gpu[index_diff] << std::endl;
-			int window_sz = 10;
+			unsigned int* d_in;
+			unsigned int* d_preds;
+			unsigned int* d_scanned_preds;
+			unsigned int* d_out;
+			checkCudaErrors(cudaMalloc(&d_in, sizeof(unsigned int) * num_elems));
+			checkCudaErrors(cudaMalloc(&d_preds, sizeof(unsigned int) * num_elems));
+			checkCudaErrors(cudaMalloc(&d_scanned_preds, sizeof(unsigned int) * num_elems));
+			checkCudaErrors(cudaMalloc(&d_out, sizeof(unsigned int) * num_elems));
+			checkCudaErrors(cudaMemcpy(d_in, h_in, sizeof(unsigned int) * num_elems, cudaMemcpyHostToDevice));
+			start = std::clock();
+			radix_sort(d_out, d_in, d_preds, d_scanned_preds, num_elems);
+			duration = (std::clock() - start) / (double)CLOCKS_PER_SEC;
+			std::cout << "GPU time: " << duration << std::endl;
+			checkCudaErrors(cudaMemcpy(h_out_gpu, d_out, sizeof(unsigned int) * num_elems, cudaMemcpyDeviceToHost));
+			checkCudaErrors(cudaFree(d_out));
+			checkCudaErrors(cudaFree(d_scanned_preds));
+			checkCudaErrors(cudaFree(d_preds));
+			checkCudaErrors(cudaFree(d_in));
 
-			std::cout << "Contents: " << std::endl;
-			std::cout << "CPU: ";
-			for (int i = -(window_sz / 2); i < (window_sz / 2); ++i)
+			// Check for any mismatches between outputs of CPU and GPU
+			bool match = true;
+			int index_diff = 0;
+			for (int i = 0; i < num_elems; ++i)
 			{
-				std::cout << h_out_cpu[index_diff + i] << ", ";
+				if (h_out_cpu[i] != h_out_gpu[i])
+				{
+					match = false;
+					index_diff = i;
+					break;
+				}
 			}
+			std::cout << "Match: " << match << std::endl;
+
+			// Detail the mismatch if any
+			if (!match)
+			{
+				std::cout << "Difference in index: " << index_diff << std::endl;
+				std::cout << "CPU: " << h_out_cpu[index_diff] << std::endl;
+				std::cout << "GPU Radix Sort: " << h_out_gpu[index_diff] << std::endl;
+				int window_sz = 10;
+
+				std::cout << "Contents: " << std::endl;
+				std::cout << "CPU: ";
+				for (int i = -(window_sz / 2); i < (window_sz / 2); ++i)
+				{
+					std::cout << h_out_cpu[index_diff + i] << ", ";
+				}
+				std::cout << std::endl;
+				std::cout << "GPU Radix Sort: ";
+				for (int i = -(window_sz / 2); i < (window_sz / 2); ++i)
+				{
+					std::cout << h_out_gpu[index_diff + i] << ", ";
+				}
+				std::cout << std::endl;
+			}
+
+			delete[] h_out_gpu;
+			delete[] h_out_cpu;
+			delete[] h_in;
+
 			std::cout << std::endl;
-			std::cout << "GPU Radix Sort: ";
-			for (int i = -(window_sz / 2); i < (window_sz / 2); ++i)
-			{
-				std::cout << h_out_gpu[index_diff + i] << ", ";
-			}
-			std::cout << std::endl;
 		}
-
-		delete[] h_out_gpu;
-		delete[] h_out_cpu;
-		delete[] h_in;
-
-		std::cout << std::endl;
 	}
 }

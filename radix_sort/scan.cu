@@ -160,7 +160,22 @@ void gpu_add_block_sums(unsigned int* const d_out,
 	__syncthreads();
 
 	d_out[2 * glbl_t_idx] = d_in_val_0 + d_block_sum_val;
-	d_out[2 * glbl_t_idx + 1] = d_in_val_1 + d_block_sum_val;
+	if (2 * glbl_t_idx + 1 < numElems)
+		d_out[2 * glbl_t_idx + 1] = d_in_val_1 + d_block_sum_val;
+}
+
+__global__
+void gpu_calc_total_sum(unsigned int* const d_total_sum,
+	const unsigned int* const d_out,
+	const unsigned int* const d_in,
+	size_t numElems)
+{
+	unsigned int glbl_t_idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+	if (glbl_t_idx > 0)
+		return;
+
+	d_total_sum[0] = d_out[numElems - 1] + d_in[numElems - 1];
 }
 
 void sum_scan_naive(unsigned int* const d_out,
@@ -174,7 +189,7 @@ void sum_scan_naive(unsigned int* const d_out,
 }
 
 void sum_scan_blelloch(unsigned int* const d_out,
-	unsigned int* const d_last_elem_dup,
+	unsigned int* const d_total_sum,
 	const unsigned int* const d_in,
 	const size_t numElems)
 {
@@ -234,9 +249,6 @@ void sum_scan_blelloch(unsigned int* const d_out,
 
 	checkCudaErrors(cudaFree(d_block_sums));
 
-	if (d_last_elem_dup != NULL)
-	{
-		unsigned int* d_last_elem = &d_out[numElems - 1];
-		checkCudaErrors(cudaMemcpy(d_last_elem_dup, d_last_elem, sizeof(unsigned int), cudaMemcpyDeviceToDevice));
-	}
+	if (d_total_sum != NULL)
+		gpu_calc_total_sum<<<1, 1>>>(d_total_sum, d_out, d_in, numElems);
 }

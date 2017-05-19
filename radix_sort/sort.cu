@@ -44,9 +44,12 @@ void gpu_scatter_elems(unsigned int* const d_out,
 	}
 
 	unsigned int d_out_idx = d_scanned_preds[glbl_t_idx];
+	// offset the addresses with total sum of predicate 
+	//  array when working with 1 bits
 	if (zero_or_one == 1)
 		d_out_idx = d_out_idx + *d_out_offset;
-	d_out[d_out_idx] = d_in[glbl_t_idx];
+	unsigned int curr_val = d_in[glbl_t_idx];
+	d_out[d_out_idx] = curr_val;
 }
 
 void radix_sort(unsigned int* const d_out,
@@ -72,9 +75,12 @@ void radix_sort(unsigned int* const d_out,
 			gpu_build_pred<<<grid_sz, block_sz>>>(d_preds, d_in, numElems, bit_mask, bit);
 
 			// Scan predicate array
-			//  If working with 0's, make sure the last element is 
-			//  recorded for determining the offset of the 1's
-			sum_scan_blelloch(d_scanned_preds, d_scatter_offset, d_preds, numElems);
+			//  If working with 0's, make sure the total sum of the predicate 
+			//  array is recorded for determining the offset of the 1's
+			if (bit == 0)
+				sum_scan_blelloch(d_scanned_preds, d_scatter_offset, d_preds, numElems);
+			else
+				sum_scan_blelloch(d_scanned_preds, NULL, d_preds, numElems);
 
 			// Scatter d_in's elements to their new locations in d_out
 			//  Use predicate array to figure out which threads will move
