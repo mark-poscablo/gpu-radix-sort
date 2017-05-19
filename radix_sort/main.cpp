@@ -43,6 +43,10 @@ int main()
 	checkCudaErrors(cudaMemcpy(d_in, h_in, sizeof(unsigned int) * num_elems, cudaMemcpyHostToDevice));
 	radix_sort(d_out, d_in, d_preds, d_scanned_preds, num_elems);
 	checkCudaErrors(cudaMemcpy(h_out_gpu, d_out, sizeof(unsigned int) * num_elems, cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaFree(d_out));
+	checkCudaErrors(cudaFree(d_scanned_preds));
+	checkCudaErrors(cudaFree(d_preds));
+	checkCudaErrors(cudaFree(d_in));
 
 	cpu_sort(h_out_cpu, h_in, num_elems);
 	for (int i = 0; i < num_elems; i++)
