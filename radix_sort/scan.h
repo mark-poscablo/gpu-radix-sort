@@ -7,6 +7,8 @@
 #include "utils.h"
 #include "timer.h"
 
+#include <cmath>
+
 void sum_scan_naive(unsigned int* const d_out,
 	const unsigned int* const d_in,
 	const size_t numElems);

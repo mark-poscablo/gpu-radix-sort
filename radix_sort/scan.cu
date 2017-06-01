@@ -183,7 +183,10 @@ void sum_scan_naive(unsigned int* const d_out,
 	const size_t numElems)
 {
 	unsigned int blockSz = MAX_BLOCK_SZ;
-	unsigned int gridSz = (unsigned int)ceil(float(numElems) / float(MAX_BLOCK_SZ));
+	//unsigned int gridSz = (unsigned int)std::ceil((double)numElems / (double)blockSz);
+	unsigned int gridSz = numElems / blockSz;
+	if (numElems % blockSz != 0)
+		gridSz += 1;
 	checkCudaErrors(cudaMemset(d_out, 0, numElems * sizeof(unsigned int)));
 	gpu_sum_scan_naive << <gridSz, blockSz >> >(d_out, d_in, numElems);
 }
@@ -201,7 +204,12 @@ void sum_scan_blelloch(unsigned int* const d_out,
 	// Thus, number of blocks must be the least number of 2048-blocks greater than the input size
 	unsigned int blockSz = MAX_BLOCK_SZ;
 	unsigned int max_elems_per_block = blockSz * 2; // due to binary tree nature of algorithm
-	unsigned int gridSz = (unsigned int)ceil(float(numElems) / float(max_elems_per_block));
+	// Instead of using ceiling and risking miscalculation due to precision, just automatically  
+	//  add 1 to the grid size when the input size cannot be divided cleanly by the block's capacity
+	//unsigned int gridSz = (unsigned int) std::ceil((double) numElems / (double) max_elems_per_block);
+	unsigned int gridSz = numElems / max_elems_per_block;
+	if (numElems % max_elems_per_block != 0)
+		gridSz += 1;
 
 	// Allocate memory for array of total sums produced by each block
 	// Array length must be the same as number of blocks / grid size

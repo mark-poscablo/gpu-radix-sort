@@ -25,14 +25,14 @@ int main()
 	std::clock_t start;
 	double duration;
 
-	for (int i = 0; i <= 26; ++i)
+	for (int i = 0; i < 28; ++i)
 	{
 		for (int j = 0; j <= 1; ++j)
 		{
 			if (i == 0 && j == 1)
 				continue;
 
-			unsigned int num_elems = (1 << i) - j;
+			unsigned int num_elems = (1 << i) + j;
 			//unsigned int num_elems = 3;
 			std::cout << "h_in size: " << num_elems << std::endl;
 

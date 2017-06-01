@@ -59,7 +59,12 @@ void radix_sort(unsigned int* const d_out,
 	const size_t numElems)
 {
 	unsigned int block_sz = 1024;
-	unsigned int grid_sz = (unsigned int)ceil(float(numElems) / float(block_sz));
+	// Instead of using ceiling and risking miscalculation due to precision, just automatically  
+	//  add 1 to the grid size when the input size cannot be divided cleanly by the block's capacity
+	//unsigned int grid_sz = (unsigned int)std::ceil((double)numElems / (double)block_sz);
+	unsigned int grid_sz = numElems / block_sz;
+	if (numElems % block_sz != 0)
+		grid_sz += 1;
 
 	unsigned int* d_scatter_offset;
 	checkCudaErrors(cudaMalloc(&d_scatter_offset, sizeof(unsigned int)));
