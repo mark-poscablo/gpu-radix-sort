@@ -1,3 +1,6 @@
+// Originally from Udacity (https://www.udacity.com/course/intro-to-parallel-programming--cs344)
+// Used only for educational purposes
+
 #ifndef UTILS_H__
 #define UTILS_H__
 

@@ -1,3 +1,6 @@
+// Originally from Udacity (https://www.udacity.com/course/intro-to-parallel-programming--cs344)
+// Used only for educational purposes
+
 #ifndef GPU_TIMER_H__
 #define GPU_TIMER_H__
 
