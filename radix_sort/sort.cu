@@ -137,6 +137,131 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
 	// shuffle local prefix sums according to calculated local sorted addresses
 	// copy locally sorted array back to global memory
 	// copy local prefix sum array back to global memory
+
+	extern __shared__ unsigned int shmem[];
+	unsigned int* s_data;
+	unsigned int* s_mask_out;
+	unsigned int* s_merged_scan_mask_out;
+	unsigned int* s_mask_out_sums;
+	unsigned int* s_scan_mask_out_sums;
+
+	unsigned int thid = threadIdx.x;
+	unsigned int ai = thid;
+	unsigned int bi = thid + blockDim.x;
+
+	// Copy block's portion of global input data to shared memory
+	unsigned int cpy_idx = max_elems_per_block * blockIdx.x + thid;
+	if (cpy_idx < d_in_len)
+	{
+		s_data[ai] = d_in[cpy_idx];
+		if (cpy_idx + blockDim.x < d_in_len)
+			s_data[bi] = d_in[cpy_idx + blockDim.x];
+	}
+
+	// To extract the correct 2 bits, we first shift the number
+	//  to the right until the correct 2 bits are in the 2 LSBs,
+	//  then mask on the number with 11 (3) to remove the bits
+	//  on the left
+	unsigned int ai_2bit_extract = (s_data[ai] >> input_shift_width) & 3;
+	unsigned int bi_2bit_extract = (s_data[bi] >> input_shift_width) & 3;
+
+	for (unsigned int i = 0; i < 4; ++i)
+	{
+		bool ai_val_equals_i = ai_2bit_extract == i;
+		bool bi_val_equals_i = bi_2bit_extract == i;
+
+		// build bit mask output
+		s_mask_out[ai + CONFLICT_FREE_OFFSET(ai)] = ai_val_equals_i;
+		s_mask_out[bi + CONFLICT_FREE_OFFSET(bi)] = bi_val_equals_i;
+
+		// scan bit mask output
+
+		// Upsweep/Reduce step
+		int offset = 1;
+		for (int d = max_elems_per_block >> 1; d > 0; d >>= 1)
+		{
+			__syncthreads();
+
+			if (thid < d)
+			{
+				int ai = offset * ((thid << 1) + 1) - 1;
+				int bi = offset * ((thid << 1) + 2) - 1;
+				ai += CONFLICT_FREE_OFFSET(ai);
+				bi += CONFLICT_FREE_OFFSET(bi);
+
+				s_mask_out[bi] += s_mask_out[ai];
+			}
+			offset <<= 1;
+		}
+
+		// Save the total sum on the global block sums array
+		// Then clear the last element on the shared memory
+		if (thid == 0)
+		{
+			s_mask_out_sums[i] = s_mask_out[max_elems_per_block - 1
+				+ CONFLICT_FREE_OFFSET(max_elems_per_block - 1)];
+			d_block_sums[i * max_elems_per_block + blockIdx.x] = s_mask_out[max_elems_per_block - 1
+				+ CONFLICT_FREE_OFFSET(max_elems_per_block - 1)];
+			s_mask_out[max_elems_per_block - 1
+				+ CONFLICT_FREE_OFFSET(max_elems_per_block - 1)] = 0;
+		}
+
+		// Downsweep step
+		for (int d = 1; d < max_elems_per_block; d <<= 1)
+		{
+			offset >>= 1;
+			__syncthreads();
+
+			if (thid < d)
+			{
+				int ai = offset * ((thid << 1) + 1) - 1;
+				int bi = offset * ((thid << 1) + 2) - 1;
+				ai += CONFLICT_FREE_OFFSET(ai);
+				bi += CONFLICT_FREE_OFFSET(bi);
+
+				unsigned int temp = s_mask_out[ai];
+				s_mask_out[ai] = s_mask_out[bi];
+				s_mask_out[bi] += temp;
+			}
+		}
+		__syncthreads();
+
+		if (ai_val_equals_i)
+		{
+			s_merged_scan_mask_out[ai] = s_mask_out[ai + CONFLICT_FREE_OFFSET(ai)];
+			d_prefix_sums[cpy_idx] = s_mask_out[ai + CONFLICT_FREE_OFFSET(ai)];
+		}
+
+		if (bi_val_equals_i)
+		{
+			s_merged_scan_mask_out[bi] = s_mask_out[bi + CONFLICT_FREE_OFFSET(bi)];
+			d_prefix_sums[cpy_idx + blockDim.x] = s_mask_out[bi + CONFLICT_FREE_OFFSET(bi)];
+		}
+	}
+	__syncthreads();
+
+	// Scan mask output sums
+	// Just do a naive scan since the array is really small
+	if (thid == 0)
+	{
+		unsigned int run_sum = 0;
+		for (unsigned int i = 0; i < 4; ++i)
+		{
+			s_scan_mask_out_sums[i] = run_sum;
+			run_sum += s_mask_out_sums[i];
+		}
+	}
+
+	// Calculate the new indices of the input elements for sorting
+	unsigned int new_ai = s_merged_scan_mask_out[ai] + s_scan_mask_out_sums[ai_2bit_extract];
+	unsigned int new_bi = s_merged_scan_mask_out[bi] + s_scan_mask_out_sums[bi_2bit_extract];
+
+	// Shuffle the block's input elements to actually sort them
+	unsigned int ai_data = s_data[ai];
+	unsigned int bi_data = s_data[bi];
+	__syncthreads();
+	s_data[new_ai] = ai_data;
+	s_data[new_bi] = bi_data;
 }
 
 __global__ void gpu_glbl_shuffle()
