@@ -1,5 +1,16 @@
 #include "sort.h"
 
+#define MAX_BLOCK_SZ 1024
+#define NUM_BANKS 32
+#define LOG_NUM_BANKS 5
+
+#ifdef ZERO_BANK_CONFLICTS
+#define CONFLICT_FREE_OFFSET(n) \
+	((n) >> NUM_BANKS + (n) >> (2 * LOG_NUM_BANKS))
+#else
+#define CONFLICT_FREE_OFFSET(n) ((n) >> LOG_NUM_BANKS)
+#endif
+
 __global__
 void gpu_build_pred(unsigned int* const d_out,
 	unsigned int* const d_in,
@@ -8,7 +19,7 @@ void gpu_build_pred(unsigned int* const d_out,
 	unsigned int zero_or_one)
 {
 	unsigned int glbl_t_idx = blockDim.x * blockIdx.x + threadIdx.x;
-	
+
 	if (glbl_t_idx >= numElems)
 		return;
 
@@ -37,7 +48,7 @@ void gpu_scatter_elems(unsigned int* const d_out,
 	unsigned int zero_or_one)
 {
 	unsigned int glbl_t_idx = blockDim.x * blockIdx.x + threadIdx.x;
-	
+
 	if (glbl_t_idx >= numElems || d_preds[glbl_t_idx] == 0)
 	{
 		return;
@@ -77,7 +88,7 @@ void radix_sort(unsigned int* const d_out,
 			unsigned int bit_mask = 1 << sw;
 
 			// Build predicate array
-			gpu_build_pred<<<grid_sz, block_sz>>>(d_preds, d_in, numElems, bit_mask, bit);
+			gpu_build_pred << <grid_sz, block_sz >> >(d_preds, d_in, numElems, bit_mask, bit);
 
 			// Scan predicate array
 			//  If working with 0's, make sure the total sum of the predicate 
@@ -90,12 +101,63 @@ void radix_sort(unsigned int* const d_out,
 			// Scatter d_in's elements to their new locations in d_out
 			//  Use predicate array to figure out which threads will move
 			//  Use scanned predicate array to figure out the locations
-			gpu_scatter_elems<<<grid_sz, block_sz>>>(d_out, d_in, d_preds, d_scanned_preds, d_scatter_offset, numElems, bit);
+			gpu_scatter_elems << <grid_sz, block_sz >> >(d_out, d_in, d_preds, d_scanned_preds, d_scatter_offset, numElems, bit);
 		}
 
 		// Copy d_out to d_in in preparation for next significant bit
 		checkCudaErrors(cudaMemcpy(d_in, d_out, sizeof(unsigned int) * numElems, cudaMemcpyDeviceToDevice));
-	}	
+	}
 
 	checkCudaErrors(cudaFree(d_scatter_offset));
+}
+
+__global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
+	unsigned int* d_prefix_sums,
+	unsigned int* d_block_sums,
+	unsigned int input_shift_width,
+	unsigned int* d_in,
+	unsigned int d_in_len,
+	unsigned int max_elems_per_block)
+{
+	// need shared memory array for:
+	// - block's share of the input data (local sort will be put here too)
+	// - mask outputs
+	// - scanned mask outputs
+	// - merged scaned mask outputs ("local prefix sum")
+	// - local sums of scanned mask outputs
+	// - scanned local sums of scanned mask outputs
+
+	// for all radix combinations:
+	//  build mask output for current radix combination
+	//  scan mask ouput
+	//  store needed value from current prefix sum array to merged prefix sum array
+	//  store total sum of mask output (obtained from scan) to global block sum array
+	// calculate local sorted address from local prefix sum and scanned mask output's total sums
+	// shuffle input block according to calculated local sorted addresses
+	// shuffle local prefix sums according to calculated local sorted addresses
+	// copy locally sorted array back to global memory
+	// copy local prefix sum array back to global memory
+}
+
+__global__ void gpu_glbl_shuffle()
+{
+	// get d = digit
+	// get n = blockIdx
+	// get m = local prefix sum array value
+	// calculate global position P_d[n] + m
+	// copy input element to final position in d_out
+}
+
+// An attempt at the gpu radix sort variant described in this paper:
+// https://vgc.poly.edu/~csilva/papers/cgf.pdf
+void radix_sort_4way()
+{
+	// for every 2 bits from LSB to MSB:
+	//  block-wise radix sort (write blocks back to global memory)
+
+	//  scan global block sum array
+
+	//  scatter/shuffle block-wise sorted array to final positions
+
+	//  copy d_out to d_in in prep for next pass
 }
