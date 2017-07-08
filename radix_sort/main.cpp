@@ -32,8 +32,8 @@ int main()
 			if (i == 0 && j == 1)
 				continue;
 
-			unsigned int num_elems = (1 << i) + j;
-			//unsigned int num_elems = 3;
+			//unsigned int num_elems = (1 << i) + j;
+			unsigned int num_elems = 2048;
 			std::cout << "h_in size: " << num_elems << std::endl;
 
 			unsigned int* h_in = new unsigned int[num_elems];
@@ -60,7 +60,7 @@ int main()
 			checkCudaErrors(cudaMalloc(&d_out, sizeof(unsigned int) * num_elems));
 			checkCudaErrors(cudaMemcpy(d_in, h_in, sizeof(unsigned int) * num_elems, cudaMemcpyHostToDevice));
 			start = std::clock();
-			radix_sort(d_out, d_in, d_preds, d_scanned_preds, num_elems);
+			radix_sort(d_out, d_in, num_elems);
 			duration = (std::clock() - start) / (double)CLOCKS_PER_SEC;
 			std::cout << "GPU time: " << duration << std::endl;
 			checkCudaErrors(cudaMemcpy(h_out_gpu, d_out, sizeof(unsigned int) * num_elems, cudaMemcpyDeviceToHost));

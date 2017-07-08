@@ -153,8 +153,8 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <CudaCompile Include="sort.cu" />
     <CudaCompile Include="scan.cu" />
+    <CudaCompile Include="sort.cu" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="scan.h" />
