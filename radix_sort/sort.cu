@@ -157,7 +157,11 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
 		s_data[ai] = d_in[cpy_idx];
 		if (cpy_idx + blockDim.x < d_in_len)
 			s_data[bi] = d_in[cpy_idx + blockDim.x];
+		else
+			s_data[bi] = 0;
 	}
+	else
+		s_data[ai] = 0;
 	__syncthreads();
 
 	// To extract the correct 2 bits, we first shift the number
@@ -173,12 +177,8 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
 		bool bi_val_equals_i = bi_2bit_extract == i;
 
 		// build bit mask output
-		if (cpy_idx < d_in_len)
-		{
-			s_mask_out[ai + CONFLICT_FREE_OFFSET(ai)] = ai_val_equals_i;
-			if (cpy_idx + blockDim.x < d_in_len)
-				s_mask_out[bi + CONFLICT_FREE_OFFSET(bi)] = bi_val_equals_i;
-		}
+		s_mask_out[ai + CONFLICT_FREE_OFFSET(ai)] = ai_val_equals_i;
+		s_mask_out[bi + CONFLICT_FREE_OFFSET(bi)] = bi_val_equals_i;
 
 		// scan bit mask output
 
@@ -204,6 +204,7 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
 		// Then clear the last element on the shared memory
 		if (thid == 0)
 		{
+			//unsigned int total_sum_idx = (unsigned int) fmin();
 			unsigned int total_sum = s_mask_out[max_elems_per_block - 1
 				+ CONFLICT_FREE_OFFSET(max_elems_per_block - 1)];;
 			s_mask_out_sums[i] = total_sum;
@@ -235,13 +236,11 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
 		if (ai_val_equals_i)
 		{
 			s_merged_scan_mask_out[ai] = s_mask_out[ai + CONFLICT_FREE_OFFSET(ai)];
-			//d_prefix_sums[cpy_idx] = s_mask_out[ai + CONFLICT_FREE_OFFSET(ai)];
 		}
 
 		if (bi_val_equals_i)
 		{
 			s_merged_scan_mask_out[bi] = s_mask_out[bi + CONFLICT_FREE_OFFSET(bi)];
-			//d_prefix_sums[cpy_idx + blockDim.x] = s_mask_out[bi + CONFLICT_FREE_OFFSET(bi)];
 		}
 	}
 	__syncthreads();
@@ -273,19 +272,18 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
 	unsigned int bi_prefix_sum = s_merged_scan_mask_out[bi];
 	__syncthreads();
 	s_data[new_ai] = ai_data;
-	s_merged_scan_mask_out[new_ai] = ai_prefix_sum;
 	s_data[new_bi] = bi_data;
+	s_merged_scan_mask_out[new_ai] = ai_prefix_sum;
 	s_merged_scan_mask_out[new_bi] = bi_prefix_sum;
 	__syncthreads();
 
 	// copy block-wise sort results to global memory
 	d_out_sorted[cpy_idx] = s_data[ai];
+	d_out_sorted[cpy_idx + blockDim.x] = s_data[bi];
+
+	// copy block-wise prefix sum results to global memory
 	d_prefix_sums[cpy_idx] = s_merged_scan_mask_out[ai];
-	if (cpy_idx + blockDim.x < d_in_len)
-	{
-		d_out_sorted[cpy_idx + blockDim.x] = s_data[bi];
-		d_prefix_sums[cpy_idx + blockDim.x] = s_merged_scan_mask_out[bi];
-	}
+	d_prefix_sums[cpy_idx + blockDim.x] = s_merged_scan_mask_out[bi];
 }
 
 __global__ void gpu_glbl_shuffle(unsigned int* d_out,
@@ -306,24 +304,22 @@ __global__ void gpu_glbl_shuffle(unsigned int* d_out,
 
 	unsigned int cpy_idx = max_elems_per_block * blockIdx.x + thid;
 	
-	unsigned int ai_data = d_in[cpy_idx];
-	unsigned int bi_data = d_in[cpy_idx + blockDim.x];
-	
-	unsigned int ai_2bit_extract = 0;
-	unsigned int bi_2bit_extract = 0;
-	
+	unsigned int ai_data = 0;
+	unsigned int bi_data = 0;
+
 	if (cpy_idx < d_in_len)
 	{
-		ai_2bit_extract = (ai_data >> input_shift_width) & 3;
+		ai_data = d_in[cpy_idx];
 		if (cpy_idx + blockDim.x < d_in_len)
-			bi_2bit_extract = (bi_data >> input_shift_width) & 3;
-		else
-			return;
+			bi_data = d_in[cpy_idx + blockDim.x];
 	}
 	else
 	{
 		return;
 	}
+	
+	unsigned int ai_2bit_extract = (ai_data >> input_shift_width) & 3;
+	unsigned int bi_2bit_extract = (bi_data >> input_shift_width) & 3;
 
 	unsigned int ai_prefix_sum = d_prefix_sums[cpy_idx];
 	unsigned int bi_prefix_sum = d_prefix_sums[cpy_idx + blockDim.x];
@@ -345,7 +341,8 @@ void radix_sort(unsigned int* const d_out,
 	unsigned int* const d_in,
 	unsigned int d_in_len)
 {
-	unsigned int block_sz = MAX_BLOCK_SZ / 2;
+	//unsigned int block_sz = MAX_BLOCK_SZ / 2;
+	unsigned int block_sz = 32;
 	unsigned int max_elems_per_block = block_sz * 2;
 	unsigned int grid_sz = d_in_len / max_elems_per_block;
 	// Take advantage of the fact that integer division drops the decimals
