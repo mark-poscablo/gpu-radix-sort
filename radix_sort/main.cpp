@@ -25,10 +25,11 @@ int main()
 	std::clock_t start;
 	double duration;
 
-	for (int i = 0; i < 28; ++i)
+	//for (int i = 0; i < 28; ++i)
+	for (int i = 10; i < 11; ++i)
 	{
-		//unsigned int num_elems = (1 << i);
-		unsigned int num_elems = 8;
+		unsigned int num_elems = (1 << i);
+		//unsigned int num_elems = 8;
 		std::cout << "h_in size: " << num_elems << std::endl;
 
 		unsigned int* h_in = new unsigned int[num_elems];
