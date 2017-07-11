@@ -163,7 +163,7 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
 	if (cpy_idx < d_in_len)
 	{
 		// Calculate the new indices of the input elements for sorting
-		unsigned int new_tidx = s_merged_scan_mask_out[thid] + s_scan_mask_out_sums[t_2bit_extract];
+		unsigned int new_pos = s_merged_scan_mask_out[thid] + s_scan_mask_out_sums[t_2bit_extract];
 		//if (new_ai >= 1024)
 		//	new_ai = 0;
 		unsigned int t_prefix_sum = s_merged_scan_mask_out[thid];
@@ -171,8 +171,8 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
 		__syncthreads();
 
 		// Shuffle the block's input elements to actually sort them
-		s_data[new_tidx] = t_data;
-		s_merged_scan_mask_out[new_tidx] = t_prefix_sum;
+		s_data[new_pos] = t_data;
+		s_merged_scan_mask_out[new_pos] = t_prefix_sum;
 		
 		__syncthreads();
 
