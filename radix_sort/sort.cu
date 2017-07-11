@@ -145,7 +145,7 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
 	unsigned int* s_mask_out = &s_data[max_elems_per_block];
 	unsigned int* s_merged_scan_mask_out = &s_mask_out[s_mask_out_len];
 	unsigned int* s_mask_out_sums = &s_merged_scan_mask_out[max_elems_per_block];
-	unsigned int* s_scan_mask_out_sums = &s_mask_out_sums[4];
+	unsigned int* s_scan_mask_out_sums = &s_mask_out_sums[16];
 
 	unsigned int thid = threadIdx.x;
 
@@ -163,9 +163,9 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
 	//  then mask on the number with 11 (3) to remove the bits
 	//  on the left
 	unsigned int t_data = s_data[thid];
-	unsigned int t_2bit_extract = (t_data >> input_shift_width) & 3;
+	unsigned int t_2bit_extract = (t_data >> input_shift_width) & 15;
 
-	for (unsigned int i = 0; i < 4; ++i)
+	for (unsigned int i = 0; i < 16; ++i)
 	{
 		// Zero out s_mask_out
 		s_mask_out[thid] = 0;
@@ -252,7 +252,7 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
 	if (thid == 0)
 	{
 		unsigned int run_sum = 0;
-		for (unsigned int i = 0; i < 4; ++i)
+		for (unsigned int i = 0; i < 16; ++i)
 		{
 			s_scan_mask_out_sums[i] = run_sum;
 			run_sum += s_mask_out_sums[i];
@@ -303,7 +303,7 @@ __global__ void gpu_glbl_shuffle(unsigned int* d_out,
 	if (cpy_idx < d_in_len)
 	{
 		unsigned int ai_data = d_in[cpy_idx];
-		unsigned int ai_2bit_extract = (ai_data >> input_shift_width) & 3;
+		unsigned int ai_2bit_extract = (ai_data >> input_shift_width) & 15;
 		unsigned int ai_prefix_sum = d_prefix_sums[cpy_idx];
 		unsigned int ai_glbl_pos = d_scan_block_sums[ai_2bit_extract * gridDim.x + blockIdx.x]
 			+ d_prefix_sums[cpy_idx];
@@ -332,7 +332,7 @@ void radix_sort(unsigned int* const d_out,
 	checkCudaErrors(cudaMemset(d_prefix_sums, 0, sizeof(unsigned int) * d_prefix_sums_len));
 
 	unsigned int* d_block_sums;
-	unsigned int d_block_sums_len = 4 * grid_sz; // 4-way split
+	unsigned int d_block_sums_len = 16 * grid_sz; // 4-way split
 	checkCudaErrors(cudaMalloc(&d_block_sums, sizeof(unsigned int) * d_block_sums_len));
 	checkCudaErrors(cudaMemset(d_block_sums, 0, sizeof(unsigned int) * d_block_sums_len));
 
@@ -345,8 +345,8 @@ void radix_sort(unsigned int* const d_out,
 	unsigned int s_data_len = max_elems_per_block;
 	unsigned int s_mask_out_len = max_elems_per_block + (max_elems_per_block / NUM_BANKS);
 	unsigned int s_merged_scan_mask_out_len = max_elems_per_block;
-	unsigned int s_mask_out_sums_len = 4; // 4-way split
-	unsigned int s_scan_mask_out_sums_len = 4;
+	unsigned int s_mask_out_sums_len = 16; // 4-way split
+	unsigned int s_scan_mask_out_sums_len = 16;
 	unsigned int shmem_sz = (s_data_len 
 							+ s_mask_out_len
 							+ s_merged_scan_mask_out_len
@@ -357,7 +357,7 @@ void radix_sort(unsigned int* const d_out,
 
 	// for every 2 bits from LSB to MSB:
 	//  block-wise radix sort (write blocks back to global memory)
-	for (unsigned int shift_width = 0; shift_width <= 30; shift_width += 2)
+	for (unsigned int shift_width = 0; shift_width <= 28; shift_width += 4)
 	{
 		gpu_radix_sort_local<<<grid_sz, block_sz, shmem_sz>>>(d_in, 
 																d_prefix_sums, 
