@@ -47,12 +47,8 @@ int main()
 		std::cout << "CPU time: " << duration << std::endl;
 
 		unsigned int* d_in;
-		unsigned int* d_preds;
-		unsigned int* d_scanned_preds;
 		unsigned int* d_out;
 		checkCudaErrors(cudaMalloc(&d_in, sizeof(unsigned int) * num_elems));
-		checkCudaErrors(cudaMalloc(&d_preds, sizeof(unsigned int) * num_elems));
-		checkCudaErrors(cudaMalloc(&d_scanned_preds, sizeof(unsigned int) * num_elems));
 		checkCudaErrors(cudaMalloc(&d_out, sizeof(unsigned int) * num_elems));
 		checkCudaErrors(cudaMemcpy(d_in, h_in, sizeof(unsigned int) * num_elems, cudaMemcpyHostToDevice));
 		start = std::clock();
@@ -61,8 +57,6 @@ int main()
 		std::cout << "GPU time: " << duration << std::endl;
 		checkCudaErrors(cudaMemcpy(h_out_gpu, d_out, sizeof(unsigned int) * num_elems, cudaMemcpyDeviceToHost));
 		checkCudaErrors(cudaFree(d_out));
-		checkCudaErrors(cudaFree(d_scanned_preds));
-		checkCudaErrors(cudaFree(d_preds));
 		checkCudaErrors(cudaFree(d_in));
 
 		// Check for any mismatches between outputs of CPU and GPU
