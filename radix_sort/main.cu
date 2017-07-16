@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <algorithm>
 #include <iostream>
+#include <ctime>
 
 #include "sort.h"
 #include "utils.h"
