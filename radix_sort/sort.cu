@@ -212,13 +212,6 @@ __global__ void gpu_glbl_shuffle(unsigned int* d_out,
 	}
 }
 
-__global__ void gpu_memcpy(unsigned int* d_out, unsigned int* d_in, unsigned int len)
-{
-	unsigned int cpy_idx = blockIdx.x * blockDim.x + threadIdx.x;
-	if (cpy_idx < len)
-		d_out[cpy_idx] = d_in[cpy_idx];
-}
-
 // An attempt at the gpu radix sort variant described in this paper:
 // https://vgc.poly.edu/~csilva/papers/cgf.pdf
 void radix_sort(unsigned int* const d_out,
@@ -292,8 +285,7 @@ void radix_sort(unsigned int* const d_out,
 													d_in_len, 
 													max_elems_per_block);
 	}
-	gpu_memcpy<<<grid_sz, block_sz>>>(d_out, d_in, d_in_len);
-	//checkCudaErrors(cudaMemcpy(d_out, d_in, sizeof(unsigned int) * d_in_len, cudaMemcpyDeviceToDevice));
+	checkCudaErrors(cudaMemcpy(d_out, d_in, sizeof(unsigned int) * d_in_len, cudaMemcpyDeviceToDevice));
 
 	checkCudaErrors(cudaFree(d_scan_block_sums));
 	checkCudaErrors(cudaFree(d_block_sums));

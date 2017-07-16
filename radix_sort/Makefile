@@ -1,5 +1,5 @@
 CUDA_INCLUDEPATH=/usr/local/cuda-5.0/include
-NVCC_OPTS=-O3 -arch=sm_20 -Xcompiler -Wall -Xcompiler -Wextra -m64
+NVCC_OPTS=-O3 -arch=sm_37 -Xcompiler -Wall -Xcompiler -Wextra -m64
 
 radix_sort: main.cu scan.o sort.o Makefile
 	nvcc -o radix_sort main.cu sort.o scan.o $(NVCC_OPTS)
