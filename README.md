@@ -6,4 +6,6 @@ CUDA implementation of parallel radix sort using Blelloch scan
 - Each block uses a bank conflict-free Blelloch scan described in this [presentation by Mark Harris](https://www.mimuw.edu.pl/~ps209291/kgkp/slides/scan.pdf)
 - Each block sorts its own local portion of the global array for greater memory coalescing during global shuffles
 - Prefix summing the global block sums uses the [large-scale bank-conflict free Blelloch scan](https://github.com/mark-poscablo/gpu-prefix-sum)
-- Outperforms the previous 2-way implementation by about 1.8x, but is still outperformed by the C++ standard library sort by about 3x. These results were seen on a machine with an Intel i7-4712HQ processor and a Nvidia GeForce GTX 850M GPU.
+- For **randomly ordered** 134 million unsigned ints, **this outperforms** `std::sort()` by about **4.22x**
+- For **descendingly ordered** 134 million unsigned ints, **`std::sort()` outperforms** this by about **1.83x**
+- The results above were observed using a p2.xlarge AWS instance running the NVIDIA CUDA Toolkit 7.5 AMI. The instance is equipped with 12 EC2 Compute Units (4 virtual cores), plus 1 NVIDIA K80 (GK210) GPU.
