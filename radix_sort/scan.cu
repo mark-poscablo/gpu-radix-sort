@@ -1,8 +1,10 @@
 #include "scan.h"
 
-#define MAX_BLOCK_SZ 1024
+#define MAX_BLOCK_SZ 256
 #define NUM_BANKS 32
 #define LOG_NUM_BANKS 5
+
+//#define ZERO_BANK_CONFLICTS
 
 #ifdef ZERO_BANK_CONFLICTS
 #define CONFLICT_FREE_OFFSET(n) \

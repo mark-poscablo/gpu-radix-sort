@@ -54,9 +54,9 @@ void test_cpu_vs_gpu(unsigned int* h_in, unsigned int num_elems)
     {
         if (h_out_cpu[i] != h_out_gpu[i])
         {
-    	match = false;
-    	index_diff = i;
-    	break;
+            match = false;
+            index_diff = i;
+            break;
         }
     }
     std::cout << "Match: " << match << std::endl;
@@ -73,13 +73,13 @@ void test_cpu_vs_gpu(unsigned int* h_in, unsigned int num_elems)
         std::cout << "CPU: ";
         for (int i = -(window_sz / 2); i < (window_sz / 2); ++i)
         {
-    	std::cout << h_out_cpu[index_diff + i] << ", ";
+            std::cout << h_out_cpu[index_diff + i] << ", ";
         }
         std::cout << std::endl;
         std::cout << "GPU Radix Sort: ";
         for (int i = -(window_sz / 2); i < (window_sz / 2); ++i)
         {
-    	std::cout << h_out_gpu[index_diff + i] << ", ";
+            std::cout << h_out_gpu[index_diff + i] << ", ";
         }
         std::cout << std::endl;
     }
@@ -93,9 +93,9 @@ int main()
     // Set up clock for timing comparisons
     srand(time(NULL));
 
-    for (int i = 0; i < 28; ++i)
+    for (int i = 25; i < 26; ++i)
     {
-        unsigned int num_elems = (1 << i) - 1;
+        unsigned int num_elems = (1 << i) - 3975159;
         //unsigned int num_elems = 8192;
         std::cout << "h_in size: " << num_elems << std::endl;
 

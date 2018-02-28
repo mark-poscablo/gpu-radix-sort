@@ -1,8 +1,10 @@
 #include "sort.h"
 
-#define MAX_BLOCK_SZ 1024
+#define MAX_BLOCK_SZ 256
 #define NUM_BANKS 32
 #define LOG_NUM_BANKS 5
+
+//#define ZERO_BANK_CONFLICTS
 
 #ifdef ZERO_BANK_CONFLICTS
 #define CONFLICT_FREE_OFFSET(n) \
@@ -69,10 +71,11 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
     {
         // Zero out s_mask_out
         s_mask_out[thid] = 0;
-        // If CONFLICT_FREE_OFFSET is used, shared memory
-        //  must be a few more than 2 * blockDim.x
-        if (thid + max_elems_per_block < s_mask_out_len)
-            s_mask_out[thid + max_elems_per_block] = 0;
+        // If CONFLICT_FREE_OFFSET is used, s_mask_out's length
+        //  must be array_len + array_len/num_banks to accommodate
+        //  padding
+        s_mask_out[thid + (max_elems_per_block >> LOG_NUM_BANKS)] = 0;
+
         __syncthreads();
 
         // build bit mask output
@@ -86,16 +89,15 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
 
         // scan bit mask output
         // Upsweep/Reduce step
-        bool t_active = thid < (blockDim.x / 2);
         int offset = 1;
         for (int d = max_elems_per_block >> 1; d > 0; d >>= 1)
         {
             __syncthreads();
 
-            if (t_active && (thid < d))
+            if (thid < d)
             {
-                int ai = offset * ((thid << 1) + 1) - 1;
-                int bi = offset * ((thid << 1) + 2) - 1;
+                int ai = (offset * ((thid << 1) + 1)) - 1;
+                int bi = (offset * ((thid << 1) + 2)) - 1;
                 ai += CONFLICT_FREE_OFFSET(ai);
                 bi += CONFLICT_FREE_OFFSET(bi);
 
@@ -108,7 +110,6 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
         // Then clear the last element on the shared memory
         if (thid == 0)
         {
-            //unsigned int total_sum_idx = (unsigned int) fmin();
             unsigned int total_sum = s_mask_out[max_elems_per_block - 1
                 + CONFLICT_FREE_OFFSET(max_elems_per_block - 1)];
             s_mask_out_sums[i] = total_sum;
@@ -122,9 +123,7 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
         for (int d = 1; d < max_elems_per_block; d <<= 1)
         {
             offset >>= 1;
-            __syncthreads();
-
-            if (t_active && (thid < d))
+            if (thid < d)
             {
                 int ai = offset * ((thid << 1) + 1) - 1;
                 int bi = offset * ((thid << 1) + 2) - 1;
@@ -135,17 +134,17 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
                 s_mask_out[ai] = s_mask_out[bi];
                 s_mask_out[bi] += temp;
             }
+
+            __syncthreads();
         }
-        __syncthreads();
 
         if (val_equals_i && (cpy_idx < d_in_len))
         {
             s_merged_scan_mask_out[thid] = s_mask_out[thid + CONFLICT_FREE_OFFSET(thid)];
         }
+
         __syncthreads();
     }
-    
-    __syncthreads();
 
     // Scan mask output sums
     // Just do a naive scan since the array is really small
@@ -158,26 +157,27 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
             run_sum += s_mask_out_sums[i];
         }
     }
+
     __syncthreads();
 
     if (cpy_idx < d_in_len)
     {
         // Calculate the new indices of the input elements for sorting
-        unsigned int new_pos = s_merged_scan_mask_out[thid] + s_scan_mask_out_sums[t_2bit_extract];
-        //if (new_ai >= 1024)
-        //    new_ai = 0;
         unsigned int t_prefix_sum = s_merged_scan_mask_out[thid];
+        unsigned int new_pos = t_prefix_sum + s_scan_mask_out_sums[t_2bit_extract];
         
         __syncthreads();
 
         // Shuffle the block's input elements to actually sort them
+        // Do this step for greater global memory transfer coalescing
+        //  in next step
         s_data[new_pos] = t_data;
         s_merged_scan_mask_out[new_pos] = t_prefix_sum;
         
         __syncthreads();
 
-        // copy block-wise sort results to global 
-        // then copy block-wise prefix sum results to global memory
+        // Copy block - wise prefix sum results to global memory
+        // Copy block-wise sort results to global 
         d_prefix_sums[cpy_idx] = s_merged_scan_mask_out[thid];
         d_out_sorted[cpy_idx] = s_data[thid];
     }
