@@ -95,7 +95,7 @@ int main()
 
     for (int i = 25; i < 26; ++i)
     {
-        unsigned int num_elems = (1 << i) - 3975159;
+        unsigned int num_elems = (1 << i);
         //unsigned int num_elems = 8192;
         std::cout << "h_in size: " << num_elems << std::endl;
 
@@ -109,10 +109,13 @@ int main()
             //std::cout << h_in[i] << " ";
         }
 
-        std::cout << "*****Descending order*****" << std::endl;
-        test_cpu_vs_gpu(h_in, num_elems);
+        //std::cout << "*****Descending order*****" << std::endl;
+        //test_cpu_vs_gpu(h_in, num_elems);
         std::cout << "*****Random order*****" << std::endl;
-        test_cpu_vs_gpu(h_in_rand, num_elems);
+        for (int i = 0; i < 5; ++i) {
+            std::cout << "*** i: " << i << " ***" << std::endl;
+            test_cpu_vs_gpu(h_in_rand, num_elems);
+        }
 
         delete[] h_in;
         delete[] h_in_rand;

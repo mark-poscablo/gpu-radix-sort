@@ -1,6 +1,6 @@
 #include "scan.h"
 
-#define MAX_BLOCK_SZ 256
+#define MAX_BLOCK_SZ 128
 #define NUM_BANKS 32
 #define LOG_NUM_BANKS 5
 
@@ -12,156 +12,6 @@
 #else
 #define CONFLICT_FREE_OFFSET(n) ((n) >> LOG_NUM_BANKS)
 #endif
-
-__global__
-void gpu_sum_scan_naive(unsigned int* const d_out,
-    const unsigned int* const d_in,
-    const size_t numElems)
-{
-    // Using naive scan where each thread calculates a separate partial sum
-    // Step complexity is still O(n) as the last thread will calculate the global sum
-
-    unsigned int d_hist_idx = blockDim.x * blockIdx.x + threadIdx.x;
-    if (d_hist_idx == 0 || d_hist_idx >= numElems)
-    {
-        return;
-    }
-    unsigned int cdf_val = 0;
-    for (int i = 0; i < d_hist_idx; ++i)
-    {
-        cdf_val = cdf_val + d_in[i];
-    }
-    d_out[d_hist_idx] = cdf_val;
-}
-
-__global__
-void gpu_sum_scan_blelloch(unsigned int* const d_out,
-    const unsigned int* const d_in,
-    unsigned int* const d_block_sums,
-    const size_t numElems)
-{
-    extern __shared__ unsigned int s_out[];
-
-    unsigned int glbl_tid = blockDim.x * blockIdx.x + threadIdx.x;
-
-    // Zero out shared memory
-    // Especially important when padding shmem for
-    //  non-power of 2 sized input
-    //s_out[2 * threadIdx.x] = 0;
-    //s_out[2 * threadIdx.x + 1] = 0;
-    s_out[threadIdx.x] = 0;
-    s_out[threadIdx.x + blockDim.x] = 0;
-
-    __syncthreads();
-
-    // Copy d_in to shared memory per block
-    //if (2 * glbl_tid < numElems)
-    //{
-    //    s_out[2 * threadIdx.x] = d_in[2 * glbl_tid];
-    //    if (2 * glbl_tid + 1 < numElems)
-    //        s_out[2 * threadIdx.x + 1] = d_in[2 * glbl_tid + 1];
-    //}
-    unsigned int cpy_idx = 2 * blockIdx.x * blockDim.x + threadIdx.x;
-    if (cpy_idx < numElems)
-    {
-        s_out[threadIdx.x] = d_in[cpy_idx];
-        if (cpy_idx + blockDim.x < numElems)
-            s_out[threadIdx.x + blockDim.x] = d_in[cpy_idx + blockDim.x];
-    }
-
-    __syncthreads();
-
-    // Reduce/Upsweep step
-
-    // 2^11 = 2048, the max amount of data a block can blelloch scan
-    unsigned int max_steps = 11; 
-
-    unsigned int r_idx = 0;
-    unsigned int l_idx = 0;
-    unsigned int sum = 0; // global sum can be passed to host if needed
-    unsigned int t_active = 0;
-    for (int s = 0; s < max_steps; ++s)
-    {
-        t_active = 0;
-
-        // calculate necessary indexes
-        // right index must be (t+1) * 2^(s+1)) - 1
-        r_idx = ((threadIdx.x + 1) * (1 << (s + 1))) - 1;
-        if (r_idx >= 0 && r_idx < 2048)
-            t_active = 1;
-
-        if (t_active)
-        {
-            // left index must be r_idx - 2^s
-            l_idx = r_idx - (1 << s);
-
-            // do the actual add operation
-            sum = s_out[l_idx] + s_out[r_idx];
-        }
-        __syncthreads();
-
-        if (t_active)
-            s_out[r_idx] = sum;
-        __syncthreads();
-    }
-
-    // Copy last element (total sum of block) to block sums array
-    // Then, reset last element to operation's identity (sum, 0)
-    if (threadIdx.x == 0)
-    {
-        d_block_sums[blockIdx.x] = s_out[r_idx];
-        s_out[r_idx] = 0;
-    }
-
-    __syncthreads();
-
-    // Downsweep step
-
-    for (int s = max_steps - 1; s >= 0; --s)
-    {
-        // calculate necessary indexes
-        // right index must be (t+1) * 2^(s+1)) - 1
-        r_idx = ((threadIdx.x + 1) * (1 << (s + 1))) - 1;
-        if (r_idx >= 0 && r_idx < 2048)
-        {
-            t_active = 1;
-        }
-
-        unsigned int r_cpy = 0;
-        unsigned int lr_sum = 0;
-        if (t_active)
-        {
-            // left index must be r_idx - 2^s
-            l_idx = r_idx - (1 << s);
-
-            // do the downsweep operation
-            r_cpy = s_out[r_idx];
-            lr_sum = s_out[l_idx] + s_out[r_idx];
-        }
-        __syncthreads();
-
-        if (t_active)
-        {
-            s_out[l_idx] = r_cpy;
-            s_out[r_idx] = lr_sum;
-        }
-        __syncthreads();
-    }
-
-    // Copy the results to global memory
-    //if (2 * glbl_tid < numElems)
-    //{
-    //    d_out[2 * glbl_tid] = s_out[2 * threadIdx.x];
-    //    if (2 * glbl_tid + 1 < numElems)
-    //        d_out[2 * glbl_tid + 1] = s_out[2 * threadIdx.x + 1];
-    //}
-    if (cpy_idx < numElems)
-    {
-        d_out[cpy_idx] = s_out[threadIdx.x];
-        if (cpy_idx + blockDim.x < numElems)
-            d_out[cpy_idx + blockDim.x] = s_out[threadIdx.x + blockDim.x];
-    }
-}
 
 __global__
 void gpu_add_block_sums(unsigned int* const d_out,
@@ -228,11 +78,10 @@ void gpu_prescan(unsigned int* const d_out,
     // Helpful especially when input size is not power of two
     s_out[thid] = 0;
     s_out[thid + blockDim.x] = 0;
-    // If CONFLICT_FREE_OFFSET is used, shared memory
-    //  must be a few more than 2 * blockDim.x
-    if (thid + max_elems_per_block < shmem_sz)
-        s_out[thid + max_elems_per_block] = 0;
-
+    // If CONFLICT_FREE_OFFSET is used, shared memory size
+    //  must be a 2 * blockDim.x + blockDim.x/num_banks
+    s_out[thid + blockDim.x + (blockDim.x >> LOG_NUM_BANKS)] = 0;
+    
     __syncthreads();
     
     // Copy d_in to shared memory
@@ -311,18 +160,6 @@ void gpu_prescan(unsigned int* const d_out,
         if (cpy_idx + blockDim.x < len)
             d_out[cpy_idx + blockDim.x] = s_out[bi + CONFLICT_FREE_OFFSET(bi)];
     }
-}
-
-void sum_scan_naive(unsigned int* const d_out,
-    const unsigned int* const d_in,
-    const size_t numElems)
-{
-    unsigned int blockSz = MAX_BLOCK_SZ;
-    unsigned int gridSz = numElems / blockSz;
-    if (numElems % blockSz != 0)
-        gridSz += 1;
-    checkCudaErrors(cudaMemset(d_out, 0, numElems * sizeof(unsigned int)));
-    gpu_sum_scan_naive << <gridSz, blockSz >> >(d_out, d_in, numElems);
 }
  
 void sum_scan_blelloch(unsigned int* const d_out,

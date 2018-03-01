@@ -1,6 +1,6 @@
 #include "sort.h"
 
-#define MAX_BLOCK_SZ 256
+#define MAX_BLOCK_SZ 128
 #define NUM_BANKS 32
 #define LOG_NUM_BANKS 5
 
@@ -242,7 +242,7 @@ void radix_sort(unsigned int* const d_out,
     // shared memory consists of 3 arrays the size of the block-wise input
     //  and 2 arrays the size of n in the current n-way split (4)
     unsigned int s_data_len = max_elems_per_block;
-    unsigned int s_mask_out_len = max_elems_per_block + (max_elems_per_block / NUM_BANKS);
+    unsigned int s_mask_out_len = max_elems_per_block + (max_elems_per_block >> LOG_NUM_BANKS);
     unsigned int s_merged_scan_mask_out_len = max_elems_per_block;
     unsigned int s_mask_out_sums_len = 4; // 4-way split
     unsigned int s_scan_mask_out_sums_len = 4;
