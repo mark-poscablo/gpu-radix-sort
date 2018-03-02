@@ -1,6 +1,6 @@
 #include "sort.h"
 
-#define MAX_BLOCK_SZ 8
+#define MAX_BLOCK_SZ 128
 
 __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
     unsigned int* d_prefix_sums,
@@ -74,11 +74,11 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
         }
         __syncthreads();
 
-        // Scan mask outputs
-        
-        for (unsigned int d = 0; 1 << (d - 1) < max_elems_per_block; d++) {
-            int partner = 0;
-            unsigned int sum = 0;
+        // Scan mask outputs (Hillis-Steele)
+        int partner = 0;
+        unsigned int sum = 0;
+        unsigned int max_steps = (unsigned int) log2f(max_elems_per_block);
+        for (unsigned int d = 0; d < max_steps; d++) {
             partner = thid - (1 << d);
             if (partner >= 0) {
                 sum = s_mask_out[thid] + s_mask_out[partner];
@@ -91,6 +91,7 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
             __syncthreads();
         }
 
+        // Shift elements to produce the same effect as exclusive scan
         unsigned int cpy_val = 0;
         cpy_val = s_mask_out[thid];
         __syncthreads();
@@ -99,6 +100,7 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
 
         if (thid == 0)
         {
+            // Zero out first element to produce the same effect as exclusive scan
             s_mask_out[0] = 0;
             unsigned int total_sum = s_mask_out[s_mask_out_len - 1];
             s_mask_out_sums[i] = total_sum;

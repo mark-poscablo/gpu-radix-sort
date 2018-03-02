@@ -93,10 +93,10 @@ int main()
     // Set up clock for timing comparisons
     srand(1);
 
-    for (int i = 25; i < 26; ++i)
+    for (int i = 24; i < 25; ++i)
     {
-        //unsigned int num_elems = (1 << i);
-        unsigned int num_elems = 8;
+        unsigned int num_elems = (1 << i);
+        //unsigned int num_elems = 8;
         std::cout << "h_in size: " << num_elems << std::endl;
 
         unsigned int* h_in = new unsigned int[num_elems];
@@ -108,7 +108,7 @@ int main()
             h_in_rand[i] = rand() % num_elems;
             //std::cout << h_in[i] << " ";
         }
-        std::cout << std::endl;
+        //std::cout << std::endl;
 
         //std::cout << "*****Descending order*****" << std::endl;
         //test_cpu_vs_gpu(h_in, num_elems);
