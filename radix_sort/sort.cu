@@ -1,17 +1,6 @@
 #include "sort.h"
 
-#define MAX_BLOCK_SZ 128
-#define NUM_BANKS 32
-#define LOG_NUM_BANKS 5
-
-//#define ZERO_BANK_CONFLICTS
-
-#ifdef ZERO_BANK_CONFLICTS
-#define CONFLICT_FREE_OFFSET(n) \
-    ((n) >> NUM_BANKS + (n) >> (2 * LOG_NUM_BANKS))
-#else
-#define CONFLICT_FREE_OFFSET(n) ((n) >> LOG_NUM_BANKS)
-#endif
+#define MAX_BLOCK_SZ 8
 
 __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
     unsigned int* d_prefix_sums,
@@ -43,7 +32,7 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
     extern __shared__ unsigned int shmem[];
     unsigned int* s_data = shmem;
     // s_mask_out[] will be scanned in place
-    unsigned int s_mask_out_len = max_elems_per_block + (max_elems_per_block >> LOG_NUM_BANKS);
+    unsigned int s_mask_out_len = max_elems_per_block + 1;
     unsigned int* s_mask_out = &s_data[max_elems_per_block];
     unsigned int* s_merged_scan_mask_out = &s_mask_out[s_mask_out_len];
     unsigned int* s_mask_out_sums = &s_merged_scan_mask_out[max_elems_per_block];
@@ -71,10 +60,8 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
     {
         // Zero out s_mask_out
         s_mask_out[thid] = 0;
-        // If CONFLICT_FREE_OFFSET is used, s_mask_out's length
-        //  must be array_len + array_len/num_banks to accommodate
-        //  padding
-        s_mask_out[thid + (max_elems_per_block >> LOG_NUM_BANKS)] = 0;
+        if (thid == 0)
+            s_mask_out[s_mask_out_len - 1] = 0;
 
         __syncthreads();
 
@@ -83,64 +70,45 @@ __global__ void gpu_radix_sort_local(unsigned int* d_out_sorted,
         if (cpy_idx < d_in_len)
         {
             val_equals_i = t_2bit_extract == i;
-            s_mask_out[thid + CONFLICT_FREE_OFFSET(thid)] = val_equals_i;
+            s_mask_out[thid] = val_equals_i;
         }
         __syncthreads();
 
-        // scan bit mask output
-        // Upsweep/Reduce step
-        int offset = 1;
-        for (int d = max_elems_per_block >> 1; d > 0; d >>= 1)
-        {
-            __syncthreads();
-
-            if (thid < d)
-            {
-                int ai = (offset * ((thid << 1) + 1)) - 1;
-                int bi = (offset * ((thid << 1) + 2)) - 1;
-                ai += CONFLICT_FREE_OFFSET(ai);
-                bi += CONFLICT_FREE_OFFSET(bi);
-
-                s_mask_out[bi] += s_mask_out[ai];
+        // Scan mask outputs
+        
+        for (unsigned int d = 0; 1 << (d - 1) < max_elems_per_block; d++) {
+            int partner = 0;
+            unsigned int sum = 0;
+            partner = thid - (1 << d);
+            if (partner >= 0) {
+                sum = s_mask_out[thid] + s_mask_out[partner];
             }
-            offset <<= 1;
+            else {
+                sum = s_mask_out[thid];
+            }
+            __syncthreads();
+            s_mask_out[thid] = sum;
+            __syncthreads();
         }
 
-        // Save the total sum on the global block sums array
-        // Then clear the last element on the shared memory
+        unsigned int cpy_val = 0;
+        cpy_val = s_mask_out[thid];
+        __syncthreads();
+        s_mask_out[thid + 1] = cpy_val;
+        __syncthreads();
+
         if (thid == 0)
         {
-            unsigned int total_sum = s_mask_out[max_elems_per_block - 1
-                + CONFLICT_FREE_OFFSET(max_elems_per_block - 1)];
+            s_mask_out[0] = 0;
+            unsigned int total_sum = s_mask_out[s_mask_out_len - 1];
             s_mask_out_sums[i] = total_sum;
             d_block_sums[i * gridDim.x + blockIdx.x] = total_sum;
-            s_mask_out[max_elems_per_block - 1
-                + CONFLICT_FREE_OFFSET(max_elems_per_block - 1)] = 0;
         }
         __syncthreads();
-
-        // Downsweep step
-        for (int d = 1; d < max_elems_per_block; d <<= 1)
-        {
-            offset >>= 1;
-            if (thid < d)
-            {
-                int ai = offset * ((thid << 1) + 1) - 1;
-                int bi = offset * ((thid << 1) + 2) - 1;
-                ai += CONFLICT_FREE_OFFSET(ai);
-                bi += CONFLICT_FREE_OFFSET(bi);
-
-                unsigned int temp = s_mask_out[ai];
-                s_mask_out[ai] = s_mask_out[bi];
-                s_mask_out[bi] += temp;
-            }
-
-            __syncthreads();
-        }
 
         if (val_equals_i && (cpy_idx < d_in_len))
         {
-            s_merged_scan_mask_out[thid] = s_mask_out[thid + CONFLICT_FREE_OFFSET(thid)];
+            s_merged_scan_mask_out[thid] = s_mask_out[thid];
         }
 
         __syncthreads();
@@ -242,7 +210,7 @@ void radix_sort(unsigned int* const d_out,
     // shared memory consists of 3 arrays the size of the block-wise input
     //  and 2 arrays the size of n in the current n-way split (4)
     unsigned int s_data_len = max_elems_per_block;
-    unsigned int s_mask_out_len = max_elems_per_block + (max_elems_per_block >> LOG_NUM_BANKS);
+    unsigned int s_mask_out_len = max_elems_per_block + 1;
     unsigned int s_merged_scan_mask_out_len = max_elems_per_block;
     unsigned int s_mask_out_sums_len = 4; // 4-way split
     unsigned int s_scan_mask_out_sums_len = 4;
