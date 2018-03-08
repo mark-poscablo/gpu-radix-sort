@@ -91,30 +91,32 @@ void test_cpu_vs_gpu(unsigned int* h_in, unsigned int num_elems)
 int main()
 {
     // Set up clock for timing comparisons
-    srand(time(NULL));
+    srand(1);
 
-    for (int i = 25; i < 26; ++i)
+    for (int i = 27; i < 28; ++i)
     {
         unsigned int num_elems = (1 << i);
-        //unsigned int num_elems = 8192;
+        //unsigned int num_elems = 8;
         std::cout << "h_in size: " << num_elems << std::endl;
 
         unsigned int* h_in = new unsigned int[num_elems];
         unsigned int* h_in_rand = new unsigned int[num_elems];
 
-        for (int i = 0; i < num_elems; i++)
+        for (int j = 0; j < num_elems; j++)
         {
-            h_in[i] = (num_elems - 1) - i;
-            h_in_rand[i] = rand() % num_elems;
-            //std::cout << h_in[i] << " ";
+            h_in[j] = (num_elems - 1) - j;
+            h_in_rand[j] = rand() % num_elems;
+            //std::cout << h_in[j] << " ";
         }
+        //std::cout << std::endl;
 
-        //std::cout << "*****Descending order*****" << std::endl;
-        //test_cpu_vs_gpu(h_in, num_elems);
-        std::cout << "*****Random order*****" << std::endl;
-        for (int i = 0; i < 5; ++i) {
-            std::cout << "*** i: " << i << " ***" << std::endl;
+        std::cout << "*** i: " << i << " ***" << std::endl;
+        for (int j = 0; j < 5; ++j) {
+            std::cout << "*****Descending order*****" << std::endl;
+            test_cpu_vs_gpu(h_in, num_elems);
+            std::cout << "*****Random order*****" << std::endl;
             test_cpu_vs_gpu(h_in_rand, num_elems);
+            std::cout << std::endl;
         }
 
         delete[] h_in;
