@@ -1,6 +1,6 @@
 # GPU Radix Sort
 CUDA implementation of parallel radix sort using Blelloch scan
-- Implementation of 4-way radix sort as described in this [paper by Ha, Krüger, and Silva](https://vgc.poly.edu/~csilva/papers/cgf.pdf)
+- Implementation of 4-way radix sort as described in this [paper by Ha, Krüger, and Silva](http://www.sci.utah.edu/publications/Ha2009b/Ha_CGF2009.pdf)
 - 2 bits per pass, resulting in 4-way split each pass
 - No order checking at every pass yet
 - Each block's internal scans now use Hillis-Steele instead of Blelloch, since the internal scan's input size is roughly the same size as the number of threads per block. In this case, Hillis-Steele's larger work complexity than Blelloch's is worth having for Hillis-Steele halving the span of Blelloch's. 
